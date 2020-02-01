@@ -1,0 +1,140 @@
+---
+title: "static sequenceSniffer"
+author: "Anne Rutten"
+date: "February 1, 2020"
+output: html_document
+---
+
+static version of the duplicated-n-gram-flagging example. Easier to copy functionality out of.
+
+## aim:
+flag data points that are part of a sequence that is present at least twice in a given data set.
+
+### `findDuplicates()`: identify duplicated sequences in a dataset
+
+* works on data vectors (e.g., a dataframe column in 'long' format)
+* function generates n-grams for given vector, iteratively increasing the sequence length from the specified `min_length` until no more duplicate n-grams are present in the data
+* data points that are part of an n-gram that is present in the data more than once are marked with an identifier specific to the sequence
+
+#### please note:
+
+* the function does not yet check for overlapping sequences within a specific n-gram length, i.e. a sequence "A A B A A B A" will count and mark n-gram "A A B A" as duplicated
+* longer sequences will overwrite shorter sequences that they overlap with, i.e., in the above example,3-gram "A B A" will be overwritten by 4-gram "A A B A".
+
+### usage:
+
+*either just copy the `findDuplicates` function and run it inside your script, or
+
+1. change the constants below and 
+2. knit this document to generate a report for a specific datafile
+
+#### dependencies
+```{r, message=FALSE }
+library(tidyverse)
+library(ngram)
+library(shiny)
+library(DT)
+library(colorspace)
+```
+
+
+
+```{r, message=FALSE }
+
+# path to csv datafile
+fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
+
+# column range of the focal data
+
+fromColumn <- 3
+toColumn <- 10
+
+# minimum sequence length to consider
+
+minLength <- 4
+```
+
+#### ducttape-and-tiewraps wrapper around ngram::ngrams()
+
+* somevector: vector of values that needs to be tested for repeat sequences
+* min_length: the minimum sequence length
+* sep: in case this is a vector of strings, some separator that is not present in the data itself
+
+```{r}
+
+findDuplicates <- function(somevector, min_length, sep=" ") {
+  # paste all values into one string for n-gram calculation
+  values_as_string <- paste(somevector, collapse= sep)
+  charactervector <- as.character(somevector)
+  output <- data.frame(value=somevector, seqID = NA)
+  done <- FALSE
+  i <- min_length
+  while (!done) {
+    duplicates <- get.phrasetable(ngram(values_as_string, i)) %>% 
+                   filter(freq>1) %>%
+                   select(ngrams) %>%
+                   mutate(ngrams = strsplit(ngrams, sep))
+    if (nrow(duplicates) > 0) {
+      for(k in 1:nrow(duplicates)) {
+        ng <- duplicates$ngrams[[k]]
+        idx <- which(charactervector == ng[1])
+        seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
+        output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
+     }
+    i<-i+1
+    } else done=TRUE
+  }
+  output$seqID
+}
+ 
+```
+
+#### raw data: 
+
+```{r, echo=FALSE}
+# read data
+d <- read.csv(fn)
+
+# reformat d from wide to long
+longd <- gather(d, key, value, fromColumn:toColumn)
+
+#identify duplicate ngrams
+longd$ngramID <- findDuplicates(longd$value, minLength)
+
+# format back to wide
+duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
+
+d
+```
+
+
+#### data summary: 
+
+```{r, echo=FALSE}
+
+  #summary
+  dataSummary <-longd %>%      
+                summarise(n_duplicates = sum(!is.na(ngramID)),
+                n_total = n(),
+                fraction = round(n_duplicates/n_total,2))
+dataSummary
+```
+
+#### detected sequences:
+
+```{r, echo=FALSE}
+
+#make a databale with highlighted background colour for duplicates
+
+ids <- unique(longd$ngramID[!is.na(longd$ngramID)])
+cols <- rainbow_hcl(length(ids))
+varnames <- names(duplicateNgramsWide)
+varsToFormat <- varnames[grepl("value", varnames)]
+varsRef <- varnames[grepl("ngramID", varnames)]
+    
+markedTable <- datatable(duplicateNgramsWide) %>%
+      formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
+
+markedTable
+```
+

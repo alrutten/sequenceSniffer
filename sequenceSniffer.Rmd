@@ -1,0 +1,169 @@
+---
+title: "repeated n-gram detection"
+author: "Anne Rutten"
+date: "January 31, 2020"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## aim:
+flag data points that are part of a sequence that is present at least twice in a given data set.
+
+### usage:
+
+either just copy the `findDuplicates` function and run it inside your script, or use the interactive bit below to load your own .csv file
+
+
+### `findDuplicates()`: identify duplicated sequences in a dataset
+
+* works on data vectors (e.g., a dataframe column in 'long' format)
+* function generates n-grams for given vector, iteratively increasing the sequence length from the specified `min_length` until no more duplicate n-grams are present in the data
+* data points that are part of an n-gram that is present in the data more than once are marked with an identifier specific to the sequence
+
+#### please note:
+
+* the function does not yet check for overlapping sequences within a specific n-gram length, i.e. a sequence "A A B A A B A" will count and mark n-gram "A A B A" as duplicated
+* longer sequences will overwrite shorter sequences that they overlap with, i.e., in the above example,3-gram "A B A" will be overwritten by 4-gram "A A B A".
+
+
+#### dependencies & constants
+```{r, message=FALSE }
+library(tidyverse)
+library(ngram)
+library(shiny)
+library(DT)
+library(colorspace)
+
+# for test run: Raphaels filename
+fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
+```
+
+#### ducttape-and-tiewraps wrapper around ngram::ngrams()
+
+* somevector: vector of values that needs to be tested for repeat sequences
+* min_length: the minimum sequence length
+* sep: in case this is a vector of strings, some separator that is not present in the data itself
+
+```{r}
+
+findDuplicates <- function(somevector, min_length, sep=" ") {
+  # paste all values into one string for n-gram calculation
+  values_as_string <- paste(somevector, collapse= sep)
+  charactervector <- as.character(somevector)
+  output <- data.frame(value=somevector, seqID = NA)
+  done <- FALSE
+  i <- min_length
+  while (!done) {
+    duplicates <- get.phrasetable(ngram(values_as_string, i)) %>% 
+                   filter(freq>1) %>%
+                   select(ngrams) %>%
+                   mutate(ngrams = strsplit(ngrams, sep))
+    if (nrow(duplicates) > 0) {
+      for(k in 1:nrow(duplicates)) {
+        ng <- duplicates$ngrams[[k]]
+        idx <- which(charactervector == ng[1])
+        seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
+        output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
+     }
+    i<-i+1
+    } else done=TRUE
+  }
+  output$seqID
+}
+ 
+```
+
+## the interactive bit:
+
+1. load a csv
+2. identify the column range for which you want to flag duplicate n-grams (these will be transformed to `long` format)
+3. check the output (use the filter function to find specific sequences)
+
+the sequence id is generated as follows: <n>Seq<ngramID>, where `n` is the sequence length, and `ngramID` does not carry other information than that they're separate entities.
+
+##### example usage in Raphaels data:
+
+download from Raphaels github: https://github.com/rroyaute/Royaute-Pruitt-Ecology-2015-Data-and-Code/blob/master/Data%20files/Pardosa_mesocosm_activity_P_R.csv
+
+```{r, echo=FALSE}
+shinyApp(
+  ui = fluidPage(
+      h3("1: load datafile"),
+    inputPanel(
+        column(12,textAreaInput("filename", label ="filename: ",value=fn, width = 500
+                ))),
+     inputPanel(actionButton("readRaw", label = "get data")),
+    
+  
+h3("2: select column range of data to detect sequences for"),
+inputPanel(     numericInput("fromCol", label = "focal column range start: ", value= 3),
+                      numericInput("toCol", label = "focal column range end: ", value=10),
+                      numericInput("minGram", label = "minimum sequence length ", value=4),
+                      actionButton("run", label = "detect duplicates")
+    ),
+    h3("raw data:"),
+    DT::dataTableOutput("rawd"),
+    h3("with duplicated sequence IDs:"), 
+    DT::dataTableOutput("dataSummary"),
+    DT::dataTableOutput("duplicateNgramsWide")
+    
+  ),
+
+server = function(input, output, session) {
+  # load data 
+  loadData <- eventReactive(input$readRaw,{
+    dataLoaded <- TRUE
+    read.csv(input$filename)
+    })
+  
+  output$rawd <- DT::renderDataTable({loadData()})
+  
+  # flag duplicate n-grams
+  
+  duplicateNgrams <- eventReactive(input$run, {
+    d <-loadData()
+    longd <- gather(d, key, value, input$fromCol:input$toCol)
+    longd$ngramID <- findDuplicates(longd$value, input$minGram)
+    longd
+    })
+  
+  output$duplicateNgramsWide <- DT::renderDataTable({
+    duplicateNgrams <- duplicateNgrams()
+     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
+    cols <- rainbow_hcl(length(ids))
+    duplicateNgramsWide <- duplicateNgrams%>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
+    varnames <- names(duplicateNgramsWide)
+    varsToFormat <- varnames[grepl("value", varnames)]
+    varsRef <- varnames[grepl("ngramID", varnames)]
+    
+    datatable(duplicateNgramsWide) %>%
+      formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
+  })
+  output$duplicateNgrams <- DT::renderDataTable({
+   duplicateNgrams <- duplicateNgrams()
+     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
+    cols <- rainbow_hcl(length(ids))
+    datatable(duplicateNgrams) %>%
+    formatStyle("ngramID", backgroundColor = styleEqual(ids,cols))
+  })
+  
+  #summary
+  dataSummary <-reactive({
+     duplicateNgrams() %>%
+      summarise(n_duplicates = sum(!is.na(ngramID)),
+                n_total = n(),
+                fraction = round(n_duplicates/n_total,2))
+  })
+  output$dataSummary <- DT::renderDataTable({
+   dataSummary()
+  })
+},
+options = list(height=5000))
+  
+```
+
