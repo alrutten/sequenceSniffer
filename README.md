@@ -22,6 +22,7 @@ flags members of sequences of at least the specified length that appear at least
   * knit document
   
   -> displays your data with identified repeat-sequence member ship colour-coded
+  
   -> randomly reorders data within original column (default) or specified grouping levels (can be specified) 1000 times and calculates the distribution of counts of datapoints that are part of a repeated sequence
   
 #### dynamic version
