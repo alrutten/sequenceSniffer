@@ -39,6 +39,7 @@ library(colorspace)
 
 
 
+
 ```{r, message=FALSE }
 
 # path to csv datafile
@@ -104,7 +105,7 @@ longd$ngramID <- findDuplicates(longd$value, minLength)
 # format back to wide
 duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
 
-d
+datatable(d)
 ```
 
 
