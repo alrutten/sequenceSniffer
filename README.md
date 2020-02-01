@@ -23,7 +23,7 @@ flags members of sequences of at least the specified length that appear at least
   
   -> displays your data with identified repeat-sequence member ship colour-coded
   
-  -> randomly reorders data within original column (default) or specified grouping levels (can be specified) 1000 times and calculates the distribution of counts of datapoints that are part of a repeated sequence
+  -> randomly reorders data within a specified grouping level (e.g., original data columns & a `treatment` column in the orignal data) 1000 times and calculates the distribution of counts of datapoints that are part of a repeated sequence
   
 #### dynamic version
   * run document
