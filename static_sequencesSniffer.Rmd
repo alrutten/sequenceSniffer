@@ -36,6 +36,7 @@ library(ngram)
 library(shiny)
 library(DT)
 library(colorspace)
+library(ggplot2)
 ```
 
 
@@ -54,6 +55,10 @@ toColumn <- 10
 # minimum sequence length to consider
 
 minLength <- 4
+
+# if you want to reorder datapoints within some group and analyze the distribution of 'number of datapoints in duplicated sequences' in your dataset, specify grouping variable here
+# the variable name that is assigned to the `long` concatenated columns specified above is 'value' 
+groupingVars <-c("Treatment", "value")
 ```
 
 #### ducttape-and-tiewraps wrapper around ngram::ngrams()
@@ -140,3 +145,42 @@ markedTable <- datatable(duplicateNgramsWide) %>%
 markedTable
 ```
 
+#### expected datapoints-in-duplicated-sequences distribution for this dataset:
+* randomly reorder datapoints within the grouping level specified in `groupingVars`
+
+
+```{r, echo=FALSE}
+
+#resample within treatment
+
+groupedD <- group_by_at(longd, groupingVars)
+
+res <- list()
+for (i in 1:1000) {
+  newd <- groupedD %>%
+    mutate(newOrder = runif(n())) %>%
+    arrange(newOrder)
+  
+  newDupes <- findDuplicates(newd$value, minLength)
+  res[[i]] <- sum(!is.na(newDupes))
+}
+
+res <- do.call(rbind, res)
+
+summary(res)
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+resdf <- bind_rows(data.frame(what = "simulated", n_duplicated = res),
+                   data.frame(what = "actual", n_duplicated = dataSummary$n_duplicates)
+                   )
+
+```
+
+```{r, echo=FALSE}
+
+ggplot(as.data.frame(resdf), aes(n_duplicated, colour = what, fill=what)) +
+  geom_bar() +
+  theme_bw() +
+  labs(title = "number of datapoints that are part of a duplicate sequence",
+       subtitle = paste("data reordered within:", paste(groupingVars, collapse=", "), "; n_runs=1000; minimum n-gram length =", minLength))
+```
