@@ -29,6 +29,7 @@ flag data points that are part of a sequence that is present at least twice in a
 2. knit this document to generate a report for a specific datafile
 
 #### dependencies
+
 ```{r, message=FALSE }
 library(tidyverse)
 library(ngram)
@@ -38,7 +39,7 @@ library(colorspace)
 ```
 
 
-
+#### controls
 
 ```{r, message=FALSE }
 
