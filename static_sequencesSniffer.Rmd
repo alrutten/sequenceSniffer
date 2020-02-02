@@ -47,7 +47,7 @@ library(ggplot2)
 # path to csv datafile
 fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
 
-# column range of the focal data
+# column range of the focal data (including)
 
 fromColumn <- 3
 toColumn <- 10
@@ -72,6 +72,8 @@ groupingVars <-c("Treatment", "value")
 findDuplicates <- function(somevector, min_length, sep=" ") {
   # paste all values into one string for n-gram calculation
   values_as_string <- paste(somevector, collapse= sep)
+
+  # input data has to be coverted to character as well
   charactervector <- as.character(somevector)
   output <- data.frame(value=somevector, seqID = NA)
   done <- FALSE
@@ -115,16 +117,33 @@ datatable(d)
 ```
 
 
+
 #### data summary: 
+
+* `key`: column within specified column range
+* `n_distinct_levels`: number of unique data values (less meaningful for `double` type, but who knows)
+* `max_rle`: the maximum length of a single repeated value in a column
+* `max_rle_at`: (if `max_rle`>1), the value(s) that has/have the  `max_rle` (e.g. default values, censored data: many duplicate n-grams expected there)
+
+-> many duplicates in a variable with low `n_distinct_levels` is to be expected.
+
+-> many duplicates in a variable with a high `max_rle` are to be expected
+
+
 
 ```{r, echo=FALSE}
 
   #summary
-  dataSummary <-longd %>%      
-                summarise(n_duplicates = sum(!is.na(ngramID)),
-                n_total = n(),
-                fraction = round(n_duplicates/n_total,2))
-dataSummary
+  
+  dataSummary <-longd %>% group_by(key) %>%     
+                summarise(n_distinct_levels = n_distinct(value),
+                          max_rle = with(rle(value) %>% set_names(c("lengths2", "values")), max(lengths2)),
+                          max_rle_at_level = if (max_rle>1) with(rle(value) %>% set_names(c("lengths2", "values")), list(values[lengths2==max(lengths2)])) else list(NA),
+                          n_duplicates = sum(!is.na(ngramID)),
+                          n_total = n(),
+                          fraction = round(n_duplicates/n_total,2)
+                          )
+datatable(dataSummary)
 ```
 
 #### detected sequences:
@@ -146,14 +165,14 @@ markedTable
 ```
 
 #### expected datapoints-in-duplicated-sequences distribution for this dataset:
-* randomly reorder datapoints within the grouping level specified in `groupingVars`
+* randomly reorder datapoints within the grouping level specified in `groupingVars` and the column range specified by `fromCol` and `toCol`
 
 
 ```{r, echo=FALSE}
 
-#resample within treatment
+# resample within grouping vars & columns
 
-groupedD <- group_by_at(longd, groupingVars)
+groupedD <- group_by_at(longd, c(groupingVars, "key"))
 
 res <- list()
 for (i in 1:1000) {
@@ -171,7 +190,7 @@ summary(res)
 ```
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 resdf <- bind_rows(data.frame(what = "simulated", n_duplicated = res),
-                   data.frame(what = "actual", n_duplicated = dataSummary$n_duplicates)
+                   data.frame(what = "actual", n_duplicated = sum(dataSummary$n_duplicates))
                    )
 
 ```
