@@ -104,6 +104,15 @@ findDuplicates <- function(somevector, min_length, sep=" ") {
 # read data
 d <- read.csv(fn)
 
+datatable(d)
+```
+
+```{r, echo=FALSE}
+# identify duplicate n-grams
+
+# add dummy rowID to be able to reformat back to `wide`. i doubt people call variables 'originalRowID' on Dryad so no check if this overwrites.
+
+d$originalRowID <- row.names(d)
 # reformat d from wide to long
 longd <- gather(d, key, value, fromColumn:toColumn)
 
@@ -113,7 +122,7 @@ longd$ngramID <- findDuplicates(longd$value, minLength)
 # format back to wide
 duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
 
-datatable(d)
+
 ```
 
 
