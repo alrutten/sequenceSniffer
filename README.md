@@ -12,7 +12,12 @@ flags members of sequences of at least the specified length that appear at least
  * the function does not yet check for overlapping sequences within a specific n-gram length, i.e. a sequence "A A B A A B A" will count and mark n-gram "A A B A" as duplicated
  * longer sequences will overwrite shorter sequences that they overlap with, i.e., in the above example,3-gram "A B A" will be overwritten by 4-gram "A A B A".
 
+#### also please note
 
+  * use your brain when interpreting the results.
+  * finding sequences in data with very low cardinality is normal.
+  * finding sequences in censored data is normal.
+  * if you pick odd grouping levels, the randomisation test will give you similarly odd results.
 
 #### static version
 
