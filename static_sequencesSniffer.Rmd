@@ -147,7 +147,7 @@ duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(valu
   dataSummary <-longd %>% group_by(key) %>%     
                 summarise(n_distinct_levels = n_distinct(value),
                           max_rle = with(rle(value) %>% set_names(c("lengths2", "values")), max(lengths2)),
-                          max_rle_at_level = if (max_rle>1) with(rle(value) %>% set_names(c("lengths2", "values")), list(values[lengths2==max(lengths2)])) else list(NA),
+                          max_rle_at_level = if (max_rle>1) with(rle(value) %>% set_names(c("lengths2", "values")), list(unique(values[lengths2==max(lengths2)]))) else list(NA),
                           n_duplicates = sum(!is.na(ngramID)),
                           n_total = n(),
                           fraction = round(n_duplicates/n_total,2)
