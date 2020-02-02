@@ -187,7 +187,7 @@ res <- list()
 for (i in 1:1000) {
   newd <- groupedD %>%
     mutate(newOrder = runif(n())) %>%
-    arrange(newOrder)
+    arrange_at(c(groupingVars, "newOrder"))
   
   newDupes <- findDuplicates(newd$value, minLength)
   res[[i]] <- sum(!is.na(newDupes))
