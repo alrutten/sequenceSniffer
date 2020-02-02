@@ -57,8 +57,8 @@ toColumn <- 10
 minLength <- 4
 
 # if you want to reorder datapoints within some group and analyze the distribution of 'number of datapoints in duplicated sequences' in your dataset, specify grouping variable here
-# the variable name that is assigned to the `long` concatenated columns specified above is 'value' 
-groupingVars <-c("Treatment", "value")
+# the variable name that is assigned to the `names of the long` concatenated columns specified above is 'key' 
+groupingVars <-c("Treatment", "key")
 ```
 
 #### ducttape-and-tiewraps wrapper around ngram::ngrams()
@@ -174,14 +174,14 @@ markedTable
 ```
 
 #### expected datapoints-in-duplicated-sequences distribution for this dataset:
-* randomly reorder datapoints within the grouping level specified in `groupingVars` and the column range specified by `fromCol` and `toCol`
+* randomly reorder datapoints within `r paste(groupingVars, collapse=", ")` (`key` contains the names of the column range specified by `fromCol` and `toCol`)
 
 
 ```{r, echo=FALSE}
 
 # resample within grouping vars & columns
 
-groupedD <- group_by_at(longd, c(groupingVars, "key"))
+groupedD <- group_by_at(longd, groupingVars)
 
 res <- list()
 for (i in 1:1000) {
