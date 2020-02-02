@@ -54,7 +54,7 @@ toColumn <- 10
 
 # minimum sequence length to consider
 
-minLength <- 4
+minLength <- 6
 
 # if you want to reorder datapoints within some group and analyze the distribution of 'number of datapoints in duplicated sequences' in your dataset, specify grouping variable here
 # the variable name that is assigned to the `names of the long` concatenated columns specified above is 'key' 
@@ -130,7 +130,7 @@ duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(valu
 #### data summary: 
 
 * `key`: column within specified column range
-* `n_distinct_levels`: number of unique data values (less meaningful for `double` type, but who knows)
+* `cardinality`: number of unique data values (less meaningful for `double` type, but who knows)
 * `max_rle`: the maximum length of a single repeated value in a column
 * `max_rle_at`: (if `max_rle`>1), the value(s) that has/have the  `max_rle` (e.g. default values, censored data: many duplicate n-grams expected there)
 
@@ -145,7 +145,7 @@ duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(valu
   #summary
   
   dataSummary <-longd %>% group_by(key) %>%     
-                summarise(n_distinct_levels = n_distinct(value),
+                summarise(cardinality = n_distinct(value),
                           max_rle = with(rle(value) %>% set_names(c("lengths2", "values")), max(lengths2)),
                           max_rle_at_level = if (max_rle>1) with(rle(value) %>% set_names(c("lengths2", "values")), list(unique(values[lengths2==max(lengths2)]))) else list(NA),
                           n_duplicates = sum(!is.na(ngramID)),
@@ -173,9 +173,11 @@ markedTable <- datatable(duplicateNgramsWide) %>%
 markedTable
 ```
 
-#### expected datapoints-in-duplicated-sequences distribution for this dataset:
-* randomly reorder datapoints within `r paste(groupingVars, collapse=", ")` (`key` contains the names of the column range specified by `fromCol` and `toCol`)
+### expected datapoints-in-duplicated-sequences distribution for this dataset:
 
+* randomly reorder datapoints within `r paste(groupingVars, collapse=", ")` (`key` contains the names of the column range specified by `fromCol` and `toCol`)
+* calculate number of datapoints in recurring sequences
+* repeat 1000 times
 
 ```{r, echo=FALSE}
 
@@ -184,31 +186,33 @@ markedTable
 groupedD <- group_by_at(longd, groupingVars)
 
 res <- list()
+
 for (i in 1:1000) {
   newd <- groupedD %>%
     mutate(newOrder = runif(n())) %>%
     arrange_at(c(groupingVars, "newOrder"))
   
-  newDupes <- findDuplicates(newd$value, minLength)
-  res[[i]] <- sum(!is.na(newDupes))
+  newd$newDupes <- findDuplicates(newd$value, minLength)
+  res[[i]] <- group_by(newd, key) %>%
+              summarise(n_duplicates = sum(!is.na(newDupes)))
 }
 
-res <- do.call(rbind, res)
+resdf <- bind_rows(res) %>%
+         mutate(datasource = "simulated") %>%
+         bind_rows(select(dataSummary, key, n_duplicates) %>%
+                     mutate(datasource = "actual data"))
 
-summary(res)
-```
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
-resdf <- bind_rows(data.frame(what = "simulated", n_duplicated = res),
-                   data.frame(what = "actual", n_duplicated = sum(dataSummary$n_duplicates))
-                   )
+nfacets <- toColumn-fromColumn
 
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.height=nfacets*2}
 
-ggplot(as.data.frame(resdf), aes(n_duplicated, colour = what, fill=what)) +
+ggplot(as.data.frame(resdf), aes(n_duplicates, colour = datasource, fill=datasource)) +
   geom_bar() +
   theme_bw() +
+  theme(legend.position="top") +
+  facet_wrap(~key) +
   labs(title = "number of datapoints that are part of a duplicate sequence",
-       subtitle = paste("data reordered within:", paste(groupingVars, collapse=", "), "; n_runs=1000; minimum n-gram length =", minLength))
+       subtitle =paste("data reordered within:", paste(groupingVars, collapse=", "), "\nn_runs=1000; minimum n-gram length =", minLength))
 ```
