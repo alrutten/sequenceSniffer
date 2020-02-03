@@ -112,6 +112,8 @@ inputPanel(     numericInput("fromCol", label = "focal column range start: ", va
                       numericInput("toCol", label = "focal column range end: ", value=10),
                       numericInput("minGram", label = "minimum sequence length ", value=4),
                       checkboxInput("ignoreEqual", label = "ignore repeats of same value",  value = FALSE),
+                      htmlOutput("groupingVarUI"),
+                br(),
                       actionButton("run", label = "detect duplicates")
                 
     ),
@@ -121,11 +123,14 @@ inputPanel(     numericInput("fromCol", label = "focal column range start: ", va
     DT::dataTableOutput("dataSummary"),
     h3("with duplicated sequence IDs:"),
     downloadButton("downloadData","Download csv"),
-    DT::dataTableOutput("duplicateNgramsWide")
+    DT::dataTableOutput("duplicateNgramsWide"),
+    h3("expected distribution of datapoints-in-duplicate-sequence:"),
+    plotOutput("randoPlot")
     
   ),
 
 server = function(input, output, session) {
+  
   # load data 
   loadData <- eventReactive(input$readRaw,{
     dataLoaded <- TRUE
@@ -163,14 +168,6 @@ server = function(input, output, session) {
     datatable(duplicateNgramsWide) %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
   })
-  output$duplicateNgrams <- DT::renderDataTable({
-   duplicateNgrams <- duplicateNgrams()
-     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
-    cols <- rainbow_hcl(length(ids))
-    datatable(duplicateNgrams) %>%
-    formatStyle("ngramID", backgroundColor = styleEqual(ids,cols))
-  })
-  
   #summary
   dataSummary <-reactive({
      duplicateNgrams() %>% group_by(key) %>%     
@@ -187,6 +184,51 @@ server = function(input, output, session) {
    dataSummary()
   })
   
+  # reactive input for grouping variables
+  output$groupingVarUI <- renderUI({
+      varnames <- names(loadData())
+     selectInput("groupingVars", label = "reorder within (randomisation test)", 
+                                  choices = varnames, selected =varnames[1],multiple = TRUE)
+    
+  })
+  
+  # randomisation test
+  
+  reorderAndReflag <- reactive({
+    longd <- duplicateNgrams()
+
+    groupedD <- group_by_at(longd, c(input$groupingVars,"key"))
+
+    res <- list()
+
+   for (i in 1:1000) {
+    newd <- groupedD %>%
+      mutate(newOrder = runif(n())) %>%
+      arrange_at(c(input$groupingVars,"key","newOrder"))
+  
+      newd$newDupes <- findDuplicates(newd$value, input$minGram, input$ignoreEqual)
+      res[[i]] <- group_by(newd, key) %>%
+                  summarise(n_duplicates = sum(!is.na(newDupes)))
+   }
+
+   resdf <- bind_rows(res) %>%
+            mutate(datasource = "simulated") %>%
+            bind_rows(select(dataSummary(), key, n_duplicates) %>%
+                      mutate(datasource = "actual data"))
+ 
+  })
+  
+  output$randoPlot <- renderPlot({
+    resdf <- reorderAndReflag()
+    ggplot(as.data.frame(resdf), aes(n_duplicates, colour = datasource, fill=datasource)) +
+  geom_bar() +
+  theme_bw() +
+  theme(legend.position="top") +
+  facet_wrap(~key) +
+  labs(title = "number of datapoints that are part of a duplicate sequence",
+       subtitle =paste("data reordered within:", paste(input$groupingVars, collapse=", "), "\nn_runs=1000; minimum n-gram length =", input$minGram)) 
+  })
+
   # download handler for flagged data
    output$downloadData <- downloadHandler(
     filename = function() {
