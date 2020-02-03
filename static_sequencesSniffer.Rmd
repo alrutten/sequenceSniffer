@@ -45,31 +45,37 @@ library(ggplot2)
 ```{r, message=FALSE }
 
 # path to csv datafile
-fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
+fn <- "/home/anne/personal/pruittdata/Keiser_and_Pruitt_2014/BT data for Nick.csv"
 
 # column range of the focal data (including)
 
-fromColumn <- 3
+fromColumn <- 4
 toColumn <- 10
 
 # minimum sequence length to consider
 
-minLength <- 6
+minLength <- 3
+
+# ignore n-grams that are repeats of one value (trying to ignore default values here without specifying the actual value)
+
+ignoreAllEqual <- TRUE
 
 # if you want to reorder datapoints within some group and analyze the distribution of 'number of datapoints in duplicated sequences' in your dataset, specify grouping variable here
 # the variable name that is assigned to the `names of the long` concatenated columns specified above is 'key' 
-groupingVars <-c("Treatment", "key")
+
+groupingVars <-c("Singleton.Pair", "Behavioral.Types", "Treatment", "key")
 ```
 
 #### ducttape-and-tiewraps wrapper around ngram::ngrams()
 
-* somevector: vector of values that needs to be tested for repeat sequences
-* min_length: the minimum sequence length
-* sep: in case this is a vector of strings, some separator that is not present in the data itself
+* `somevector`: vector of values that needs to be tested for repeat sequences
+* `min_length`: the minimum sequence length
+* `sep`: in case this is a vector of strings, some separator that is not present in the data itself
+* `ignoreAllEquall`: ignore n-grams that are repeats of one single value (trying to ignore defaults/censored data/etc)
 
 ```{r}
 
-findDuplicates <- function(somevector, min_length, sep=" ") {
+findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" ") {
   # paste all values into one string for n-gram calculation
   values_as_string <- paste(somevector, collapse= sep)
 
@@ -79,19 +85,26 @@ findDuplicates <- function(somevector, min_length, sep=" ") {
   done <- FALSE
   i <- min_length
   while (!done) {
-    duplicates <- get.phrasetable(ngram(values_as_string, i)) %>% 
+    duplicates <- get.phrasetable(ngram(values_as_string, i, sep)) %>% 
                    filter(freq>1) %>%
                    select(ngrams) %>%
-                   mutate(ngrams = strsplit(ngrams, sep))
-    if (nrow(duplicates) > 0) {
-      for(k in 1:nrow(duplicates)) {
-        ng <- duplicates$ngrams[[k]]
-        idx <- which(charactervector == ng[1])
-        seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
-        output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
-     }
+                   mutate(ngrams = strsplit(ngrams, " ")) # ngram() makes " " separated ngrams.
+    
+    if (ignoreAllEqual & nrow(duplicates)>0) {
+      duplicates <- duplicates[rle(duplicates$ngrams[[1]])$lengths[[1]]<i,]
+      if (length(duplicates) ==0) done=TRUE
+    }
+    if (!done) {
+      if (nrow(duplicates)>0) {
+        for(k in 1:nrow(duplicates)) {
+          ng <- duplicates$ngrams[[k]]
+          idx <- which(charactervector == ng[1])
+          seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
+          output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
+        }
+      }
     i<-i+1
-    } else done=TRUE
+   } else done=TRUE
   }
   output$seqID
 }
@@ -107,6 +120,7 @@ d <- read.csv(fn)
 datatable(d)
 ```
 
+
 ```{r, echo=FALSE}
 # identify duplicate n-grams
 
@@ -117,7 +131,7 @@ d$originalRowID <- row.names(d)
 longd <- gather(d, key, value, fromColumn:toColumn)
 
 #identify duplicate ngrams
-longd$ngramID <- findDuplicates(longd$value, minLength)
+longd$ngramID <- findDuplicates(longd$value, minLength, ignoreAllEqual)
 
 # format back to wide
 duplicateNgramsWide <- longd %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
@@ -157,6 +171,7 @@ datatable(dataSummary)
 
 #### detected sequences:
 
+
 ```{r, echo=FALSE}
 
 #make a databale with highlighted background colour for duplicates
@@ -166,8 +181,9 @@ cols <- rainbow_hcl(length(ids))
 varnames <- names(duplicateNgramsWide)
 varsToFormat <- varnames[grepl("value", varnames)]
 varsRef <- varnames[grepl("ngramID", varnames)]
-    
-markedTable <- datatable(duplicateNgramsWide) %>%
+markedTable <- datatable(duplicateNgramsWide)
+
+if (length(ids)>0) markedTable <- markedTable %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
 
 markedTable
@@ -192,7 +208,7 @@ for (i in 1:1000) {
     mutate(newOrder = runif(n())) %>%
     arrange_at(c(groupingVars, "newOrder"))
   
-  newd$newDupes <- findDuplicates(newd$value, minLength)
+  newd$newDupes <- findDuplicates(newd$value, minLength, ignoreAllEqual)
   res[[i]] <- group_by(newd, key) %>%
               summarise(n_duplicates = sum(!is.na(newDupes)))
 }
