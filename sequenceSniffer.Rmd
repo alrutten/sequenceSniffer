@@ -1,5 +1,5 @@
 ---
-title: "repeated n-gram detection"
+title: "duplicate n-gram detection"
 author: "Anne Rutten"
 date: "January 31, 2020"
 output: html_document
@@ -11,48 +11,58 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-## aim:
+### aim:
 flag data points that are part of a sequence that is present at least twice in a given data set.
 
-### usage:
 
-either just copy the `findDuplicates` function and run it inside your script, or use the interactive bit below to load your own .csv file
+#### sequence flagging:
 
-
-### `findDuplicates()`: identify duplicated sequences in a dataset
-
-* works on data vectors (e.g., a dataframe column in 'long' format)
-* function generates n-grams for given vector, iteratively increasing the sequence length from the specified `min_length` until no more duplicate n-grams are present in the data
+* function generates n-grams for specified data, iteratively increasing the sequence length from the specified `min_length` until no more duplicate n-grams are present in the data
 * data points that are part of an n-gram that is present in the data more than once are marked with an identifier specific to the sequence
+
 
 #### please note:
 
 * the function does not yet check for overlapping sequences within a specific n-gram length, i.e. a sequence "A A B A A B A" will count and mark n-gram "A A B A" as duplicated
-* longer sequences will overwrite shorter sequences that they overlap with, i.e., in the above example,3-gram "A B A" will be overwritten by 4-gram "A A B A".
+* longer sequences will overwrite shorter sequences that they overlap with, i.e., in the above example, 3-gram "A B A" will be overwritten by 4-gram "A A B A". If "A B A" occurs at a different position as well this may seem an 'orphan' sequence (because its brothers got overwritten by the 4-gram). Likewise, shorter n-grams may be only partly overwritten by a longer n-gram.
 
 
-#### dependencies & constants
-```{r, message=FALSE }
-library(tidyverse)
-library(ngram)
-library(shiny)
-library(DT)
-library(colorspace)
+```{r, echo=FALSE, message=FALSE }
+
+# helper function: calculate plot height
+gg_facet_nrow <- function(p){
+  num_panels <- length(unique(ggplot_build(p)$data[[1]]$PANEL)) # get number of panels
+  num_cols <- ggplot_build(p)$layout$facet$params$ncol # get number of columns set by user
+  num_rows <- wrap_dims(num_panels, ncol=num_cols)[1] # determine number of rows
+}
+# dependencies
+# helper function: install packages when missing
+
+dynamic_require <- function(package){
+  # CRAN packages
+  if(eval(parse(text=paste("require(",package,")")))) return(TRUE) else
+    install.packages(package)
+  return(eval(parse(text=paste("require(",package,")"))))
+}
+
+deps <- c("tidyverse","ngram", "shiny", "DT", "colorspace")
+
+for (d in deps) dynamic_require(d)
 
 # for test run: Raphaels filename
 fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
 ```
 
 
+
+```{r echo = FALSE}
+
 #### ducttape-and-tiewraps wrapper around `ngram::ngram()`
 
-* `somevector`: vector of values that needs to be tested for repeat sequences
-* `min_length`: the minimum sequence length
-* `ignoreAllEqual`: ignore n-grams that are repeats of one single value (trying to ignore defaults/censored data/etc)
-* `sep`: in case this is a vector of strings, some separator that is not present in the data itself
-
-
-```{r}
+#* `somevector`: vector of values that needs to be tested for repeat sequences
+#* `min_length`: the minimum sequence length
+#* `ignoreAllEqual`: ignore n-grams that are repeats of one single value (trying to ignore defaults/censored data/etc)
+#* `sep`: in case this is a vector of strings, some separator that is not present in the data itself
 
 findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" ") {
   # paste all values into one string for n-gram calculation
@@ -85,55 +95,102 @@ findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" "
  
 ```
 
-## the interactive bit:
-
-1. load a csv
-2. identify the column range for which you want to flag duplicate n-grams (these will be transformed to `long` format)
-3. check the output (use the filter function to find specific sequences)
-
-the sequence id is generated as follows: <n>Seq<ngramID>, where `n` is the sequence length, and `ngramID` does not carry other information than that they're separate entities.
-
 ##### example usage in Raphaels data:
 
 download from Raphaels github: https://github.com/rroyaute/Royaute-Pruitt-Ecology-2015-Data-and-Code/blob/master/Data%20files/Pardosa_mesocosm_activity_P_R.csv
 
+### 1: load data
+
+* enter path to your datafile (csv format)
+
 ```{r, echo=FALSE}
-shinyApp(
-  ui = fluidPage(
-      h3("1: load datafile"),
     inputPanel(
         column(12,textAreaInput("filename", label ="filename: ",value=fn, width = 500
-                ))),
-     inputPanel(actionButton("readRaw", label = "get data")),
-    
-  
-h3("2: select column range of data to detect sequences for"),
+                )))
+     inputPanel(actionButton("readRaw", label = "get data"))
+```
+
+#### raw data:
+
+* view can be expanded
+
+```{r, echo=FALSE}  
+
+DT::dataTableOutput("rawd")
+
+```
+
+### 2: controls:    
+
+* `focal column range start`: start of column range (including)
+* `focal column range end`: end of column range (including)
+* `min sequence length`: detect recurring sequences of this length or greater
+* `ignore repeats of same value`: in some cases (default values, censored data) many repeat sequences are expected. Check this box to ignore sequences consisting of the same value, repeated.
+
+```{r, echo=FALSE}  
 inputPanel(     numericInput("fromColumn", label = "focal column range start: ", value= 3),
                       numericInput("toColumn", label = "focal column range end: ", value=10),
-                      numericInput("minGram", label = "minimum sequence length ", value=4),
+                      br(),
+                      numericInput("minGram", label = "min sequence length ", value=4),
                       checkboxInput("ignoreEqual", label = "ignore repeats of same value",  value = FALSE),
-                      htmlOutput("groupingVarUI"),
-                br(),
+                      br(),
                       actionButton("run", label = "detect duplicates")
                 
-    ),
-    h3("raw data:"),
-    h5("rows that are not unique marked in blue"),
-    DT::dataTableOutput("rawd"),
-    h4("summary"),
-    DT::dataTableOutput("dataSummary"),
-    h3("with duplicated sequence IDs:"),
-    h5(" coloured cells: sequence in column is not unique"),
-    h5("grey cells: row is not unique"),
-    downloadButton("downloadData","Download csv"),
-    DT::dataTableOutput("duplicateNgramsWide"),
-    h3("expected distribution of datapoints-in-duplicate-sequence:"),
-    plotOutput("randoPlot")
-    
-  ),
+    )
+```
 
-server = function(input, output, session) {
+### data summary:
+
+* `key`: focal column name
+* `cardinality`: number of distinct values in the data
+* `max_rle`: longest sequence of repeats of the same number (if high, you may want to select `ignore repeats of same value` above)
+* `max_rle_at_level`: the value(s) that is/are repeated `max_rle` times
+* `n_duplicates`: number of datapoints that are part of any non-unique sequence of length > `min sequence length`
+* `n_total`: number of rows
+* `fraction`: `n_duplicates`/`n_total`
+
+```{r, echo=FALSE}  
+    DT::dataTableOutput("dataSummary")
+```
+
+### detected sequences: 
+
+* view can be expanded
+* colours: sequence in column is not unique
+* grey: row is not unique
+* `value_*` columns: the original data for the focal columna
+* `ngramID_*` columns: ngramID of the sequence in the corresponding `value_*` column
+
+`ngramID` is generated as follows: n+`sequence length`+`Sequence ID`. `Sequence ID` does not carry more information.
+
+```{r, echo=FALSE}  
+
+    inputPanel(downloadButton("downloadData","Download csv"))
+    DT::dataTableOutput("duplicateNgramsWide")
+
+```
+
+### 3: randomisation controls:
+
+* data will be reordered per column within the grouping levels specified
+* **note:** *the order of the selected fields should reflect the data structure.*  
+
+```{r, echo=FALSE}  
+inputPanel(htmlOutput("groupingVarUI"),
+           actionButton("randomiRun", label = "run random reordering")
+)
+
+```
+
+### randomisation result:
+
+```{r, echo=FALSE, fig.height=30}  
+
+    plotOutput("randoPlot")
+```    
   
+
+```{r, echo=FALSE}  
   # load data 
   loadData <- eventReactive(input$readRaw,{
     dataLoaded <- TRUE
@@ -198,16 +255,17 @@ server = function(input, output, session) {
   })
   
   # reactive input for grouping variables
+  
   output$groupingVarUI <- renderUI({
       varnames <- names(loadData())
-     selectInput("groupingVars", label = "reorder within (randomisation test)", 
+     selectInput("groupingVars", label = "reorder within:", 
                                   choices = varnames, selected =varnames[1],multiple = TRUE)
     
   })
   
   # randomisation test
   
-  reorderAndReflag <- reactive({
+  reorderAndReflag <- eventReactive(input$randomiRun, {
     longd <- duplicateNgrams()
 
     groupedD <- group_by_at(longd, c(input$groupingVars,"key"))
@@ -231,7 +289,11 @@ server = function(input, output, session) {
  
   })
   
-  output$randoPlot <- renderPlot({
+    facetPlotHeight <-reactive({
+    gg_facet_nrow(randoPlot())
+  })
+
+  randoPlot <- reactive({
     resdf <- reorderAndReflag()
     ggplot(as.data.frame(resdf), aes(n_duplicates, colour = datasource, fill=datasource)) +
   geom_bar() +
@@ -239,8 +301,12 @@ server = function(input, output, session) {
   theme(legend.position="top") +
   facet_wrap(~key) +
   labs(title = "number of datapoints that are part of a duplicate sequence",
-       subtitle =paste("data reordered within:", paste(input$groupingVars, collapse=", "), "\nn_runs=1000; minimum n-gram length =", input$minGram)) 
+       subtitle =paste("data reordered within:", paste(input$groupingVars, collapse=", "), "\nn_runs=1000; minimum n-gram length =", input$minGram))
   })
+  
+  output$randoPlot <- renderPlot({
+     randoPlot()
+  }, height = function() {facetPlotHeight() * 300})
 
   # download handler for flagged data
    output$downloadData <- downloadHandler(
@@ -251,8 +317,6 @@ server = function(input, output, session) {
       write.csv(duplicateNgramsWide(), file, row.names = FALSE)
     }
   )
-},
-options = list(height=5000))
-  
+
 ```
 
