@@ -43,37 +43,44 @@ library(colorspace)
 fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
 ```
 
-#### ducttape-and-tiewraps wrapper around ngram::ngrams()
 
-* somevector: vector of values that needs to be tested for repeat sequences
-* min_length: the minimum sequence length
-* sep: in case this is a vector of strings, some separator that is not present in the data itself
+#### ducttape-and-tiewraps wrapper around `ngram::ngram()`
+
+* `somevector`: vector of values that needs to be tested for repeat sequences
+* `min_length`: the minimum sequence length
+* `ignoreAllEqual`: ignore n-grams that are repeats of one single value (trying to ignore defaults/censored data/etc)
+* `sep`: in case this is a vector of strings, some separator that is not present in the data itself
+
 
 ```{r}
 
-findDuplicates <- function(somevector, min_length, sep=" ") {
+findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" ") {
   # paste all values into one string for n-gram calculation
   values_as_string <- paste(somevector, collapse= sep)
+
+  # input data has to be coverted to character as well
   charactervector <- as.character(somevector)
   output <- data.frame(value=somevector, seqID = NA)
   done <- FALSE
   i <- min_length
   while (!done) {
-    duplicates <- get.phrasetable(ngram(values_as_string, i)) %>% 
+    duplicates <- get.phrasetable(ngram(values_as_string, i, sep)) %>% 
                    filter(freq>1) %>%
                    select(ngrams) %>%
-                   mutate(ngrams = strsplit(ngrams, sep))
-    if (nrow(duplicates) > 0) {
+                   mutate(ngrams = strsplit(ngrams, " ")) # ngram() makes " " separated ngrams.
+    
+    if (ignoreAllEqual & nrow(duplicates)>0) duplicates <- filter(duplicates, rle(ngrams[[1]])$lengths[[1]]<i)
+    if (nrow(duplicates)>0) {
       for(k in 1:nrow(duplicates)) {
         ng <- duplicates$ngrams[[k]]
         idx <- which(charactervector == ng[1])
         seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
         output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
-     }
+      }
+    }  else done=TRUE
     i<-i+1
-    } else done=TRUE
-  }
-  output$seqID
+ }
+ output$seqID
 }
  
 ```
@@ -104,12 +111,16 @@ h3("2: select column range of data to detect sequences for"),
 inputPanel(     numericInput("fromCol", label = "focal column range start: ", value= 3),
                       numericInput("toCol", label = "focal column range end: ", value=10),
                       numericInput("minGram", label = "minimum sequence length ", value=4),
+                      checkboxInput("ignoreEqual", label = "ignore repeats of same value",  value = FALSE),
                       actionButton("run", label = "detect duplicates")
+                
     ),
     h3("raw data:"),
     DT::dataTableOutput("rawd"),
-    h3("with duplicated sequence IDs:"), 
+    h4("summary"),
     DT::dataTableOutput("dataSummary"),
+    h3("with duplicated sequence IDs:"),
+    downloadButton("downloadData","Download csv"),
     DT::dataTableOutput("duplicateNgramsWide")
     
   ),
@@ -127,17 +138,25 @@ server = function(input, output, session) {
   
   duplicateNgrams <- eventReactive(input$run, {
     d <-loadData()
+    d$originalRowID <- row.names(d)
     longd <- gather(d, key, value, input$fromCol:input$toCol)
-    longd$ngramID <- findDuplicates(longd$value, input$minGram)
+    longd$ngramID <- findDuplicates(longd$value, input$minGram, input$ignoreEqual)
     longd
     })
   
+  duplicateNgramsWide <- reactive({
+    duplicateNgrams <- duplicateNgrams()
+    duplicateNgrams %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
+  })
+  
   output$duplicateNgramsWide <- DT::renderDataTable({
     duplicateNgrams <- duplicateNgrams()
-     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
-    cols <- rainbow_hcl(length(ids))
-    duplicateNgramsWide <- duplicateNgrams%>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
+    duplicateNgramsWide <- duplicateNgramsWide()
     varnames <- names(duplicateNgramsWide)
+    
+    ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
+    cols <- rainbow_hcl(length(ids))
+
     varsToFormat <- varnames[grepl("value", varnames)]
     varsRef <- varnames[grepl("ngramID", varnames)]
     
@@ -154,14 +173,29 @@ server = function(input, output, session) {
   
   #summary
   dataSummary <-reactive({
-     duplicateNgrams() %>%
-      summarise(n_duplicates = sum(!is.na(ngramID)),
-                n_total = n(),
-                fraction = round(n_duplicates/n_total,2))
+     duplicateNgrams() %>% group_by(key) %>%     
+                summarise(cardinality = n_distinct(value),
+                          max_rle = with(rle(value) %>% set_names(c("lengths2", "values")), max(lengths2)),
+                          max_rle_at_level = if (max_rle>1) with(rle(value) %>% set_names(c("lengths2", "values")), list(unique(values[lengths2==max(lengths2)]))) else list(NA),
+                          n_duplicates = sum(!is.na(ngramID)),
+                          n_total = n(),
+                          fraction = round(n_duplicates/n_total,2)
+                          )
+    
   })
   output$dataSummary <- DT::renderDataTable({
    dataSummary()
   })
+  
+  # download handler for flagged data
+   output$downloadData <- downloadHandler(
+    filename = function() {
+      gsub(".csv",input$filename, paste0("_flagged_min_length_",input$minGram,".csv"))
+    },
+    content = function(file) {
+      write.csv(duplicateNgramsWide(), file, row.names = FALSE)
+    }
+  )
 },
 options = list(height=5000))
   
