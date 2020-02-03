@@ -45,25 +45,30 @@ library(ggplot2)
 ```{r, message=FALSE }
 
 # path to csv datafile
-fn <- "/home/anne/personal/pruittdata/Keiser_and_Pruitt_2014/BT data for Nick.csv"
+fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
 
 # column range of the focal data (including)
 
-fromColumn <- 4
+fromColumn <- 3
 toColumn <- 10
 
 # minimum sequence length to consider
 
-minLength <- 3
+minLength <- 4
+
+# EXPERIMENTAL: fuzzy match ("A A A A" will also match "A A B A")
+
+fuzzyMatch <- FALSE
 
 # ignore n-grams that are repeats of one value (trying to ignore default values here without specifying the actual value)
 
-ignoreAllEqual <- TRUE
+ignoreAllEqual <- FALSE
 
 # if you want to reorder datapoints within some group and analyze the distribution of 'number of datapoints in duplicated sequences' in your dataset, specify grouping variable here
 # the variable name that is assigned to the `names of the long` concatenated columns specified above is 'key' 
 
-groupingVars <-c("Singleton.Pair", "Behavioral.Types", "Treatment", "key")
+groupingVars <-c("Treatment", "key")
+
 ```
 
 #### ducttape-and-tiewraps wrapper around ngram::ngrams()
@@ -90,34 +95,34 @@ findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" "
                    select(ngrams) %>%
                    mutate(ngrams = strsplit(ngrams, " ")) # ngram() makes " " separated ngrams.
     
-    if (ignoreAllEqual & nrow(duplicates)>0) {
-      duplicates <- duplicates[rle(duplicates$ngrams[[1]])$lengths[[1]]<i,]
-      if (length(duplicates) ==0) done=TRUE
-    }
-    if (!done) {
-      if (nrow(duplicates)>0) {
-        for(k in 1:nrow(duplicates)) {
-          ng <- duplicates$ngrams[[k]]
-          idx <- which(charactervector == ng[1])
-          seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
-          output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
-        }
+    if (ignoreAllEqual & nrow(duplicates)>0) duplicates <- filter(duplicates, rle(ngrams[[1]])$lengths[[1]]<i)
+    if (nrow(duplicates)>0) {
+      for(k in 1:nrow(duplicates)) {
+        ng <- duplicates$ngrams[[k]]
+        idx <- which(charactervector == ng[1])
+        seqStart <- idx[sapply(idx, function(j) all(charactervector[j:(j+(length(ng)-1))] == ng))]
+        output$seqID[rep(seqStart, each = i) + 0:(i-1)] <-paste0("n",i,"Seq",k)
       }
+    }  else done=TRUE
     i<-i+1
-   } else done=TRUE
-  }
-  output$seqID
+ }
+ output$seqID
 }
  
 ```
 
 #### raw data: 
 
+duplicated rows in focal columns marked in blue. This may mean nothing.
+
 ```{r, echo=FALSE}
 # read data
 d <- read.csv(fn)
+d$duplicatedRow <- (duplicated(d[,fromColumn:toColumn])|rev(duplicated(d[,fromColumn:toColumn] %>% map_df(rev))))
 
-datatable(d)
+datatable(d) %>%
+  formatStyle(c(fromColumn:toColumn), "duplicatedRow", 
+              backgroundColor = styleEqual(c(TRUE),"lightblue"))
 ```
 
 
@@ -171,6 +176,8 @@ datatable(dataSummary)
 
 #### detected sequences:
 
+* light grey: row is not unique
+* colour: sequence in column is not unique
 
 ```{r, echo=FALSE}
 
@@ -181,9 +188,10 @@ cols <- rainbow_hcl(length(ids))
 varnames <- names(duplicateNgramsWide)
 varsToFormat <- varnames[grepl("value", varnames)]
 varsRef <- varnames[grepl("ngramID", varnames)]
-markedTable <- datatable(duplicateNgramsWide)
-
-if (length(ids)>0) markedTable <- markedTable %>%
+    
+markedTable <- datatable(duplicateNgramsWide) %>%
+      formatStyle(varsToFormat, "duplicatedRow", 
+              backgroundColor = styleEqual(c(TRUE),"lightgrey")) %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
 
 markedTable

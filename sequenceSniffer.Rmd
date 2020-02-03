@@ -108,8 +108,8 @@ shinyApp(
     
   
 h3("2: select column range of data to detect sequences for"),
-inputPanel(     numericInput("fromCol", label = "focal column range start: ", value= 3),
-                      numericInput("toCol", label = "focal column range end: ", value=10),
+inputPanel(     numericInput("fromColumn", label = "focal column range start: ", value= 3),
+                      numericInput("toColumn", label = "focal column range end: ", value=10),
                       numericInput("minGram", label = "minimum sequence length ", value=4),
                       checkboxInput("ignoreEqual", label = "ignore repeats of same value",  value = FALSE),
                       htmlOutput("groupingVarUI"),
@@ -118,10 +118,13 @@ inputPanel(     numericInput("fromCol", label = "focal column range start: ", va
                 
     ),
     h3("raw data:"),
+    h5("rows that are not unique marked in blue"),
     DT::dataTableOutput("rawd"),
     h4("summary"),
     DT::dataTableOutput("dataSummary"),
     h3("with duplicated sequence IDs:"),
+    h5(" coloured cells: sequence in column is not unique"),
+    h5("grey cells: row is not unique"),
     downloadButton("downloadData","Download csv"),
     DT::dataTableOutput("duplicateNgramsWide"),
     h3("expected distribution of datapoints-in-duplicate-sequence:"),
@@ -134,17 +137,25 @@ server = function(input, output, session) {
   # load data 
   loadData <- eventReactive(input$readRaw,{
     dataLoaded <- TRUE
-    read.csv(input$filename)
+    d <- read.csv(input$filename)
+     d$duplicatedRow <- (duplicated(d[,input$fromColumn:input$toColumn])|rev(duplicated(d[,input$fromColumn:input$toColumn] %>% map_df(rev))))
+    d
     })
   
-  output$rawd <- DT::renderDataTable({loadData()})
+  output$rawd <- DT::renderDataTable({
+    d <- loadData()
+   
+   datatable(d) %>%
+   formatStyle(c(input$fromColumn:input$toColumn), "duplicatedRow", 
+              backgroundColor = styleEqual(c(TRUE),"lightblue"))
+   })
   
   # flag duplicate n-grams
   
   duplicateNgrams <- eventReactive(input$run, {
     d <-loadData()
     d$originalRowID <- row.names(d)
-    longd <- gather(d, key, value, input$fromCol:input$toCol)
+    longd <- gather(d, key, value, input$fromColumn:input$toColumn)
     longd$ngramID <- findDuplicates(longd$value, input$minGram, input$ignoreEqual)
     longd
     })
@@ -166,6 +177,8 @@ server = function(input, output, session) {
     varsRef <- varnames[grepl("ngramID", varnames)]
     
     datatable(duplicateNgramsWide) %>%
+      formatStyle(varsToFormat, "duplicatedRow", 
+              backgroundColor = styleEqual(c(TRUE),"lightgrey")) %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
   })
   #summary
