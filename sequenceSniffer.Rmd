@@ -232,7 +232,7 @@ inputPanel(htmlOutput("groupingVarUI"),
     varsToFormat <- varnames[grepl("value", varnames)]
     varsRef <- varnames[grepl("ngramID", varnames)]
     
-    duplicateNgramsWide$duplicatedRow <- (duplicated(duplicateNgramsWide[,varsToFormat])|rev(duplicated(duplicateNgramsWide[,varsToFormat])%>% map_df(rev)))
+    duplicateNgramsWide$duplicatedRow <- duplicated(select_at(duplicateNgramsWide, varsToFormat))|rev(duplicated(select_at(duplicateNgramsWide, varsToFormat) %>% map_df(rev)))
     
     
     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
