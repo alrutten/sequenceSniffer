@@ -213,7 +213,7 @@ inputPanel(htmlOutput("groupingVarUI"),
     longd
     })
   
-  duplicateNgramsWide <- reactive({
+  duplicateNgramsWide <- eventReactive(input$run,{
     duplicateNgrams <- duplicateNgrams()
     duplicateNgrams %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
   })
@@ -244,7 +244,7 @@ inputPanel(htmlOutput("groupingVarUI"),
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
   })
   #summary
-  dataSummary <-reactive({
+  dataSummary <-eventReactive(input$run, {
      duplicateNgrams() %>% group_by(key) %>%     
                 summarise(cardinality = n_distinct(value),
                           max_rle = with(rle(value) %>% set_names(c("lengths2", "values")), max(lengths2)),
