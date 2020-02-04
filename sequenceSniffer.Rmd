@@ -194,17 +194,13 @@ inputPanel(htmlOutput("groupingVarUI"),
   # load data 
   loadData <- eventReactive(input$readRaw,{
     dataLoaded <- TRUE
-    d <- read.csv(input$filename)
-     d$duplicatedRow <- (duplicated(d[,input$fromColumn:input$toColumn])|rev(duplicated(d[,input$fromColumn:input$toColumn] %>% map_df(rev))))
-    d
+     read.csv(input$filename)
     })
   
   output$rawd <- DT::renderDataTable({
     d <- loadData()
    
-   datatable(d) %>%
-   formatStyle(c(input$fromColumn:input$toColumn), "duplicatedRow", 
-              backgroundColor = styleEqual(c(TRUE),"lightblue"))
+   datatable(d)
    })
   
   # flag duplicate n-grams
@@ -225,14 +221,23 @@ inputPanel(htmlOutput("groupingVarUI"),
   output$duplicateNgramsWide <- DT::renderDataTable({
     duplicateNgrams <- duplicateNgrams()
     duplicateNgramsWide <- duplicateNgramsWide()
+    
+    
     varnames <- names(duplicateNgramsWide)
     
     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
     cols <- rainbow_hcl(length(ids))
 
+    varnames <- names(duplicateNgramsWide)
     varsToFormat <- varnames[grepl("value", varnames)]
     varsRef <- varnames[grepl("ngramID", varnames)]
     
+    duplicateNgramsWide$duplicatedRow <- (duplicated(duplicateNgramsWide[,varsToFormat])|rev(duplicated(duplicateNgramsWide[,varsToFormat])%>% map_df(rev)))
+    
+    
+    ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
+    cols <- rainbow_hcl(length(ids))
+
     datatable(duplicateNgramsWide) %>%
       formatStyle(varsToFormat, "duplicatedRow", 
               backgroundColor = styleEqual(c(TRUE),"lightgrey")) %>%
