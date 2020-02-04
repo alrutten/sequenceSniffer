@@ -213,12 +213,13 @@ inputPanel(htmlOutput("groupingVarUI"),
     longd
     })
   
-  duplicateNgramsWide <- eventReactive(input$run,{
+  duplicateNgramsWide <- reactive({
     duplicateNgrams <- duplicateNgrams()
     duplicateNgrams %>% pivot_wider(names_from =key, values_from=c(value, ngramID)) 
   })
   
-  output$duplicateNgramsWide <- DT::renderDataTable({
+  observeEvent(input$run, {
+    output$duplicateNgramsWide <- DT::renderDataTable({
     duplicateNgrams <- duplicateNgrams()
     duplicateNgramsWide <- duplicateNgramsWide()
     
@@ -242,6 +243,7 @@ inputPanel(htmlOutput("groupingVarUI"),
       formatStyle(varsToFormat, "duplicatedRow", 
               backgroundColor = styleEqual(c(TRUE),"lightgrey")) %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
+  })
   })
   #summary
   dataSummary <-eventReactive(input$run, {
