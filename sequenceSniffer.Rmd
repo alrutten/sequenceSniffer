@@ -174,6 +174,8 @@ inputPanel(     numericInput("fromColumn", label = "focal column range start: ",
 
 * data will be reordered per column within the grouping levels specified
 * **note:** *the order of the selected fields should reflect the data structure.*  
+* **caveat** if the assumption that the data points within the applied grouping level are independent of each other is violated (e.g, if the data is a time series and the measured feature is expected to vary with time) this test is relatively meaningless.
+
 
 ```{r, echo=FALSE}  
 inputPanel(htmlOutput("groupingVarUI"),
@@ -182,7 +184,15 @@ inputPanel(htmlOutput("groupingVarUI"),
 
 ```
 
-### randomisation result:
+### randomisation results:
+
+
+
+```{r, echo=FALSE}  
+
+     DT::dataTableOutput("randoTable")
+```    
+
 
 ```{r, echo=FALSE, fig.height=30}  
 
@@ -239,7 +249,11 @@ inputPanel(htmlOutput("groupingVarUI"),
     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
     cols <- rainbow_hcl(length(ids))
 
-    datatable(duplicateNgramsWide) %>%
+    datatable(duplicateNgramsWide,
+              options = list(
+                lengthMenu = list(c(10, 50, -1), c("10","50","All")),
+                pageLength=50)
+              ) %>%
       formatStyle(varsToFormat, "duplicatedRow", 
               backgroundColor = styleEqual(c(TRUE),"lightgrey")) %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
@@ -302,13 +316,27 @@ inputPanel(htmlOutput("groupingVarUI"),
 
   randoPlot <- reactive({
     resdf <- reorderAndReflag()
+    reflines <- filter(resdf, datasource=="actual data")
+    
     ggplot(as.data.frame(resdf), aes(n_duplicates, colour = datasource, fill=datasource)) +
-  geom_bar() +
-  theme_bw() +
+     geom_bar() +
+     theme_bw() +
+     geom_vline(data=reflines, aes(xintercept = n_duplicates), lty="dashed") +
   theme(legend.position="top") +
   facet_wrap(~key) +
   labs(title = "number of datapoints that are part of a duplicate sequence",
        subtitle =paste("data reordered within:", paste(input$groupingVars, collapse=", "), "\nn_runs=1000; minimum n-gram length =", input$minGram))
+  })
+  
+  randoSummary <- reactive({
+    resdf <- reorderAndReflag() %>%
+             group_by(key) %>%
+             mutate(percentile = rank(n_duplicates)/n()) %>%
+             filter(datasource == "actual data")
+    
+  })
+  output$randoTable <- DT::renderDataTable({
+    randoSummary()
   })
   
   output$randoPlot <- renderPlot({
