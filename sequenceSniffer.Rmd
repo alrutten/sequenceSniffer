@@ -186,7 +186,7 @@ inputPanel(htmlOutput("groupingVarUI"),
 
 ### randomisation results:
 
-
+* `percentile`: percentile for actual data. (i.e, in `percentile` fraction of randomisations, *fewer* data points are part of not-unique sequences; and for `1 - percentile` fraction of randomisations, data points are *more* often part of a non-unique sequence than the actual data)
 
 ```{r, echo=FALSE}  
 
@@ -331,7 +331,7 @@ inputPanel(htmlOutput("groupingVarUI"),
   randoSummary <- reactive({
     resdf <- reorderAndReflag() %>%
              group_by(key) %>%
-             mutate(percentile = rank(n_duplicates)/n()) %>%
+             mutate(percentile = round(rank(n_duplicates)/n(),2)) %>%
              filter(datasource == "actual data")
     
   })
