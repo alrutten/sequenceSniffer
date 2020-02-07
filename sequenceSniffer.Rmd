@@ -49,6 +49,9 @@ deps <- c("tidyverse","ngram", "shiny", "DT", "colorspace")
 
 for (d in deps) dynamic_require(d)
 
+# do not read strings a sfactors
+options(stringsAsFactors = FALSE)
+
 # for test run: Raphaels filename
 fn <- "/home/anne/Pardosa_mesocosm_activity_P_R.csv"
 ```
@@ -70,6 +73,7 @@ findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" "
 
   # input data has to be coverted to character as well
   charactervector <- as.character(somevector)
+  charactervector[is.na(charactervector)] ="NA"
   output <- data.frame(value=somevector, seqID = NA)
   done <- FALSE
   i <- min_length
@@ -243,22 +247,27 @@ inputPanel(htmlOutput("groupingVarUI"),
     varsToFormat <- varnames[grepl("value", varnames)]
     varsRef <- varnames[grepl("ngramID", varnames)]
     
-    duplicateNgramsWide$duplicatedRow <- duplicated(select_at(duplicateNgramsWide, varsToFormat))|rev(duplicated(select_at(duplicateNgramsWide, varsToFormat) %>% map_df(rev)))
+    duplicateNgramsWide$duplicatedRow <- duplicated(select_at(duplicateNgramsWide,    varsToFormat))|rev(duplicated(select_at(duplicateNgramsWide, varsToFormat) %>% map_df(rev)))
     
     
     ids <- unique(duplicateNgrams$ngramID[!is.na(duplicateNgrams$ngramID)])
     cols <- rainbow_hcl(length(ids))
 
-    datatable(duplicateNgramsWide,
+    dt <- datatable(duplicateNgramsWide,
               options = list(
                 lengthMenu = list(c(10, 50, -1), c("10","50","All")),
                 pageLength=50)
-              ) %>%
+              ) 
+    if (any(!is.na(select_at(duplicateNgramsWide, varsRef)))) {
+      dt <- dt %>%
       formatStyle(varsToFormat, "duplicatedRow", 
               backgroundColor = styleEqual(c(TRUE),"lightgrey")) %>%
       formatStyle(varsToFormat, varsRef, backgroundColor=styleEqual(ids,cols))
+    }
+    dt
+    })
   })
-  })
+  
   #summary
   dataSummary <-eventReactive(input$run, {
      duplicateNgrams() %>% group_by(key) %>%     
@@ -272,7 +281,13 @@ inputPanel(htmlOutput("groupingVarUI"),
     
   })
   output$dataSummary <- DT::renderDataTable({
-   dataSummary()
+ #  datatable(dataSummary(),
+  #           options = list(
+   #            paging = FALSE,
+    #           searching = FALSE
+     #        )
+   #)
+    dataSummary()
   })
   
   # reactive input for grouping variables
