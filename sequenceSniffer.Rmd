@@ -324,7 +324,7 @@ inputPanel(htmlOutput("groupingVarUI"),
   
   duplicateNgramsConstMultiplied <- eventReactive(input$run, {
     longd <- dataLong() %>%
-               mutate(value = lead(as.numeric(value), 1)/as.numeric(value))
+               mutate(value = round(lead(as.numeric(value), 1)/as.numeric(value),2))
     longd$ngramID <- findDuplicates(longd$value, input$minGram, input$ignoreEqual)
     longd
     })
