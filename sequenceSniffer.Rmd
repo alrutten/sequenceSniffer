@@ -83,7 +83,7 @@ findDuplicates <- function(somevector, min_length, ignoreAllEqual=FALSE, sep=" "
                    select(ngrams) %>%
       rowwise() %>%
                    mutate(ngrams = strsplit(ngrams, " "), # ngram() makes " " separated ngrams.
-                          has_repeats = with(rle(ngrams) %>% set_names(c("lengths2", "values")), max(lengths2)>3))
+                          has_repeats = with(rle(ngrams) %>% set_names(c("lengths2", "values")), max(lengths2)>2))
     
     if (ignoreAllEqual & nrow(duplicates)>0) duplicates <- filter(duplicates, !has_repeats)
     if (nrow(duplicates)>0) {
@@ -315,18 +315,18 @@ inputPanel(htmlOutput("groupingVarUI"),
   
   duplicateNgramsConstAdded <- eventReactive(input$run, {
     longd <- dataLong() %>%
-               mutate(value = lead(as.numeric(value), 1) - as.numeric(value))
-    longd$ngramID <- findDuplicates(longd$value, input$minGram, input$ignoreEqual)
-    longd
+               mutate(diffToNext = lead(as.numeric(value), 1) - as.numeric(value))
+    longd$ngramID <- findDuplicates(longd$diffToNext, input$minGram, input$ignoreEqual)
+    dplyr::select(longd,-diffToNext)
     })
   
   # flag duplicate n-grams where sequences are multiplied by a constant
   
   duplicateNgramsConstMultiplied <- eventReactive(input$run, {
     longd <- dataLong() %>%
-               mutate(value = round(lead(as.numeric(value), 1)/as.numeric(value),2))
-    longd$ngramID <- findDuplicates(longd$value, input$minGram, input$ignoreEqual)
-    longd
+               mutate(ratioNext = round(lead(as.numeric(value), 1)/as.numeric(value),2))
+    longd$ngramID <- findDuplicates(longd$ratioNext, input$minGram, input$ignoreEqual)
+    dplyr::select(longd, -ratioNext)
     })
 ```
 
